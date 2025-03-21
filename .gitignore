@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+env/
+*.venv
+
+# Django / Python
+db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+*.log
+*.pot
+*.pyc
+local_settings.py
+.env
+.env.*
+
+# Django Migrations
+*/migrations/*.py
+*/migrations/*.pyc
+
+# Logs and Debug
+logs/
+*.log
+debug.log
+nohup.out
+
+# VS Code and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime*
+
+# Playwright (Browser automation)
+playwright/.cache/
+playwright/.pytest_cache/
+playwright-report/
+
+# Chrome and User Data
+chrome-data/
+browser_automation.log
+
+# System files
+.DS_Store
+Thumbs.db
