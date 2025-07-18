@@ -6,31 +6,53 @@ import logging
 import os
 from urllib.parse import urlparse
 import string
-from django.http import JsonResponse
-from rest_framework.decorators import api_view
 
-# Configure logging
+# Configure loggingA
 logging.basicConfig(level=logging.INFO)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROXY_FILE = os.path.join(BASE_DIR, r"D:\browserbot\proxy.txt")
 
+REALISTIC_VIEWPORTS = [
+    # Mobile portrait
+    {"width": 360, "height": 640},   # Samsung Galaxy S22
+    {"width": 375, "height": 812},   # iPhone X
+    {"width": 390, "height": 844},   # iPhone 13 Mini
+    {"width": 414, "height": 896},   # iPhone 11 Pro Max
+
+    # Mobile landscape
+    {"width": 640, "height": 360},   # Landscape - Samsung Galaxy S22
+    {"width": 812, "height": 375},   # Landscape - iPhone X
+    {"width": 896, "height": 414},   # Landscape - iPhone 11 Pro Max
+
+    # Tablets
+    {"width": 768, "height": 1024},  # iPad Portrait
+    {"width": 1024, "height": 768},  # iPad Landscape
+    {"width": 820, "height": 1180},  # iPad Air Portrait
+    {"width": 1180, "height": 820},  # iPad Air Landscape
+
+    # Desktops
+    {"width": 1280, "height": 720},  # HD
+    {"width": 1920, "height": 1080}, # Full HD
+    {"width": 1440, "height": 900},  # Widescreen
+]
+
 DEVICES = [
         # iPhone 14 Series
-        # "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14
-        # "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Plus
-        # "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Pro
-        # "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Pro Max
-        # # iPhone 13 Series
-        # "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13
-        # "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Mini
-        # "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Pro
-        # "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Pro Max
-        # # iPhone SE (3rd Gen)
-        # "iPhone; CPU iPhone OS 15_4 like Mac OS X",  # iPhone SE (2022)
-        # # iPad Series
-        # "iPad; CPU OS 17_0 like Mac OS X",  # iPad Air 5 (M1)
-        # "iPad; CPU OS 17_0 like Mac OS X",  # iPad Mini 6
+        "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14
+        "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Plus
+        "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Pro
+        "iPhone; CPU iPhone OS 16_0 like Mac OS X",  # iPhone 14 Pro Max
+        # iPhone 13 Series
+        "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13
+        "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Mini
+        "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Pro
+        "iPhone; CPU iPhone OS 15_0 like Mac OS X",  # iPhone 13 Pro Max
+        # iPhone SE (3rd Gen)
+        "iPhone; CPU iPhone OS 15_4 like Mac OS X",  # iPhone SE (2022)
+        # iPad Series
+        "iPad; CPU OS 17_0 like Mac OS X",  # iPad Air 5 (M1)
+        "iPad; CPU OS 17_0 like Mac OS X",  # iPad Mini 6
         # Galaxy S23 Series
         "Linux; Android 13; SM-S918B Build/TP1A.220624.014",  # Galaxy S23 Ultra
         "Linux; Android 13; SM-S916B Build/TP1A.220624.014",  # Galaxy S23+
@@ -134,7 +156,6 @@ def load_proxies():
 
 
 def is_proxy_working(proxy):
-    """Test if a proxy is working by making a request."""
     parsed_proxy = urlparse(f"http://{proxy}")
     proxy_dict = {
         "http": f"http://{parsed_proxy.netloc}",
@@ -155,16 +176,18 @@ def is_proxy_working(proxy):
     except requests.exceptions.RequestException as e:
         logging.warning(f"Proxy failed: {proxy} | Error: {e}")
     return False
-
+failed_proxies = set()
 
 async def get_valid_proxy():
-    """Get a valid proxy from the list."""
     proxies = load_proxies()
-    random.shuffle(proxies)  # Rotate proxies
+    random.shuffle(proxies)
     for proxy in proxies:
+        if proxy in failed_proxies:
+            continue  # Skip previously failed proxies
         if is_proxy_working(proxy):
             logging.info(f"Found valid proxy: {proxy}")
             return proxy
+        failed_proxies.add(proxy)  # Mark as failed
     logging.error("No valid proxies found.")
     return None
 
@@ -179,7 +202,8 @@ def generate_dynamic_cookies():
     cookies = {
         "pdhtkv": "true",
         "pdhtkv28": "true",
-        "u_pl26188540": "1",
+        "u_pl25543386": "1",
+        'u_pl26376953': '1',
         "iprc" + random_string(32): str(random.randint(1000000, 9999999)),  # Convert to string
         'uncs': uncs_values,  # Convert to string
         'uncs28': uncs_values,  # Convert to string
@@ -189,42 +213,57 @@ def generate_dynamic_cookies():
     return cookies
 
 
-def get_random_user_agent():
-    """
-    Generate a random User-Agent string based on a combination of devices and browsers.
-    """
-    try:
-        # Select a random device and browser
-        device = random.choice(DEVICES)
-        browser = random.choice(list(BROWSER_VERSIONS.keys()))
-        version_range = BROWSER_VERSIONS[browser]
-        version = random.randint(*version_range)
+def get_random_user_agent(proxy_geo=None):
+    device = random.choice(DEVICES)
+    browser = random.choice(list(BROWSER_VERSIONS.keys()))
+    version_range = BROWSER_VERSIONS[browser]
+    version = random.randint(*version_range)
 
-        # Generate the User-Agent string based on the device type
-        if "iPhone" in device or "iPad" in device:
+    if proxy_geo:
+        language = proxy_geo.get("language", "en-US")
+        platform = "Win32" if "Windows" in device else "Macintosh"
+    else:
+        language = "en-US"
+        platform = "Win32"
+
+    # iOS Devices
+    if "iPhone" in device or "iPad" in device:
+        user_agent = (
+            f"Mozilla/5.0 ({device}) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            f"Version/{version}.0 Mobile/15E148 Safari/604.1"
+        )
+    # Android Devices
+    elif "Android" in device:
+        user_agent = (
+            f"Mozilla/5.0 ({device}) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{version}.0.0.0 Mobile Safari/537.36"
+        )
+    # macOS Devices
+    elif "Macintosh" in device:
+        user_agent = (
+            f"Mozilla/5.0 ({device}) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{version}.0.0.0 Safari/537.36"
+        )
+    # Windows Devices
+    elif "Windows" in device:
+        if browser == "Firefox":
             user_agent = (
-                f"Mozilla/5.0 ({device}) AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                f"Version/{version}.0 Mobile/15E148 Safari/604.1"
+                f"Mozilla/5.0 ({device}; rv:{version}.0) Gecko/20100101 Firefox/{version}.0"
             )
-        elif "Android" in device:
+        else:  # Chrome or Edge
             user_agent = (
                 f"Mozilla/5.0 ({device}) AppleWebKit/537.36 (KHTML, like Gecko) "
-                f"Chrome/{version}.0.0.0 Mobile Safari/537.36"
+                f"{browser}/{version}.0.0.0 Safari/537.36"
             )
-        else:
-            user_agent = (
-                f"Mozilla/5.0 ({device}) AppleWebKit/537.36 (KHTML, like Gecko) "
-                f"Chrome/{version}.0.0.0 Safari/537.36"
-            )
+    else:
+        # Fallback
+        user_agent = (
+            f"Mozilla/5.0 ({device}) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"{browser}/{version}.0.0.0 Safari/537.36"
+        )
 
-        # Log the generated User-Agent with additional context
-        logging.info(f"Generated random User-Agent: {user_agent} | Browser: {browser}, Device: {device}")
-        return user_agent
-
-    except Exception as e:
-        logging.error(f"Error generating User-Agent: {e}")
-        return None
-
+    logging.info(f"Generated random User-Agent: {user_agent}")
+    return user_agent
 
 def get_ip_geo(proxy=None):
     try:
@@ -321,73 +360,132 @@ async def spoof_fingerprints(context, geo):
     )
     logging.info("Browser fingerprints spoofed successfully.")
 
+async def update_cookies(context, domain):
+    """Update cookies dynamically for the given domain."""
+    logging.info("Generating new dynamic cookies...")
+    dynamic_cookies = generate_dynamic_cookies()
+    
+    # Clear existing cookies for the domain (optional)
+    await context.clear_cookies()
+    
+    # Add new cookies to the context
+    await context.add_cookies([
+        {"name": name, "value": value, "domain": domain, "path": "/"}
+        for name, value in dynamic_cookies.items()
+    ])
+    logging.info(f"Updated dynamic cookies for domain: {domain}")
+
+async def mimic_human_behavior(page, context):
+    """Simulate human-like behavior with dynamic cookie updates."""
+    try:
+        # Simulate random mouse movements
+        await page.mouse.move(random.randint(0, 500), random.randint(0, 500))
+        await asyncio.sleep(random.uniform(0.5, 2))  # Random delay
+        
+        # Update cookies before interacting
+        await update_cookies(context, "www.profitableratecpm.com")
+        
+        # Simulate scrolling
+        await page.evaluate("window.scrollBy(0, window.innerHeight);")
+        await asyncio.sleep(random.uniform(1, 3))  # Random delay
+        
+        # Update cookies again before clicking
+        await update_cookies(context, "www.profitableratecpm.com")
+        
+        # Simulate clicking on a button or element
+        await page.click("button.some-button-selector")  # Replace with actual selector
+        await asyncio.sleep(random.uniform(1, 2))  # Random delay
+        
+    except Exception as e:
+        logging.error(f"Error during mimic_human_behavior: {e}")
+        
 
 async def main():
     """Main function to automate browser actions with proxy."""
-    valid_proxy = await get_valid_proxy()
-    if not valid_proxy:
-        logging.error("Exiting due to lack of valid proxies.")
-        return {"status": "error", "message": "No valid proxies found."}
-    
-    # Parse proxy into components
-    parsed_proxy = urlparse(f"http://{valid_proxy}")
-    username_password, host_port = parsed_proxy.netloc.split("@", 1)
-    username, password = username_password.split(":", 1)
-    host, port = host_port.split(":", 1)
-    proxy_config = {
-        "server": f"http://{host}:{port}",
-        "username": username,
-        "password": password,
-    }
-    
-    async with async_playwright() as p:
-        # Launch browser with proxy
-        logging.info(f"Launching browser with proxy: {valid_proxy}")
-        user_agent = get_random_user_agent()
-        geo_data = get_ip_geo(valid_proxy)
-        browser = await p.chromium.launch(
-            headless=False,
-            proxy=proxy_config,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        context = await browser.new_context(
-            user_agent=user_agent,
-            viewport={"width": random.randint(1024, 1920), "height": random.randint(768, 1080)},
-            ignore_https_errors=True,
-        )
-        
-        dynamic_cookies = generate_dynamic_cookies()
-        await context.add_cookies([
-            {"name": name, "value": value, "domain": "www.effectiveratecpm.com", "path": "/"}
-            for name, value in dynamic_cookies.items()
-        ])
-        logging.info(f"Added dynamic cookies for domain: www.effectiveratecpm.com")
-        
-        await spoof_fingerprints(context, geo_data)
-        page = await context.new_page()
-        await page.goto("https://10575.play.gamezop.com")
-        await asyncio.sleep(15)
-        
-        await context.clear_cookies()
-        await page.evaluate("""
-            try {
-                window.localStorage.clear();
-                window.sessionStorage.clear();
-            } catch (error) {
-                console.warn('Failed to clear localStorage/sessionStorage:', error.message);
+    while True:  # Infinite loop to keep opening browsers one by one
+        try:
+            valid_proxy = await get_valid_proxy()
+            if not valid_proxy:
+                logging.error("Exiting due to lack of valid proxies.")
+                break  # Exit the loop if no valid proxies are found
+            
+            # Parse proxy into components
+            parsed_proxy = urlparse(f"http://{valid_proxy}")
+            username_password, host_port = parsed_proxy.netloc.split("@", 1)
+            username, password = username_password.split(":", 1)
+            host, port = host_port.split(":", 1)
+            proxy_config = {
+                "server": f"http://{host}:{port}",
+                "username": username,
+                "password": password,
             }
-        """)
-        await browser.close()
-    
-    return {"status": "success", "message": "Browser automation completed successfully."}
+            
+            async with async_playwright() as p:
+                # Launch browser with proxy
+                logging.info(f"Launching browser with proxy: {valid_proxy}")
+                viewport = random.choice(REALISTIC_VIEWPORTS)
+                is_mobile = viewport["width"] < 600
+                dpr = 3 if is_mobile else 1
+                geo_data = get_ip_geo(valid_proxy)
+                user_agent = get_random_user_agent(geo_data)
+                
+                browser = await p.chromium.launch(
+                    headless=False,  # Set headless=True to run in background
+                    proxy=proxy_config,
+                    args=["--disable-blink-features=AutomationControlled"],  # Hide automation
+                )
+                context = await browser.new_context(
+                    user_agent=user_agent,
+                    viewport=viewport,
+                    device_scale_factor=dpr,
+                    is_mobile=is_mobile,
+                    ignore_https_errors=True,
+                )
+                
+                # Generate initial dynamic cookies
+                dynamic_cookies = generate_dynamic_cookies()
+                await context.add_cookies([
+                    {"name": name, "value": value, "domain": "www.profitableratecpm.com", "path": "/"}
+                    for name, value in dynamic_cookies.items()
+                ])
+                logging.info(f"Added initial dynamic cookies for domain: www.profitableratecpm.com")
+                
+                # Spoof browser fingerprints
+                await spoof_fingerprints(context, geo_data)
+                
+                # Navigate to the target website
+                page = await context.new_page()
+                await page.goto("https://news-hub-indol.vercel.app/")
+                
+                # # Mimic human behavior with dynamic cookie updates
+                # await mimic_human_behavior(page, context)
+                
+                await update_cookies(context, "www.profitableratecpm.com")
+                
+                # Keep the browser open for a while
+                await asyncio.sleep(50)
+                
+                # Cleanup before closing the browser
+                logging.info("Cleaning up cookies and storage...")
+                await context.clear_cookies()
+                await page.evaluate("""
+                    try {
+                        window.localStorage.clear();
+                        window.sessionStorage.clear();
+                    } catch (error) {
+                        console.warn('Failed to clear localStorage/sessionStorage:', error.message);
+                    }
+                """)
+                logging.info("Cleanup completed.")
+                await browser.close()
+                logging.info("Browser closed. Restarting...")
+        
+        except Exception as e:
+            logging.error(f"An error occurred: {e}. Restarting browser...")
+            continue  # Restart the loop to open a new browser instance
+        
+        
 if __name__ == "__main__":
     asyncio.run(main())
     
-    
-@api_view(["POST"])
-def visit_url(request):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(main())
-    logging.info(f"Site visit result: {result}")
-    return JsonResponse(result, safe=False)
+    logging.info("Script finished running.")

@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import start_bot
+from .views import visit_url
 
 urlpatterns = [
-    path('start-bot/', start_bot, name='start-bot'),
+    path('visit/', visit_url, name='visit_url'),
 ]
